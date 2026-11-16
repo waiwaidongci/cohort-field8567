@@ -46,9 +46,10 @@ docker compose exec -T backend python -m scripts.seed_demo
 - 输入：10–5000 行匿名客户；唯一 `code`，四个有限非负特征。CSV 表头为 `code,recency,frequency,spend,learning_days`。导入通过文本框提交，不保留上传原文件。
 - 算法一：对所选至少两个特征做 Z-score：`z=(x−mean)/std`；KMeans（`random_state=42,n_init=10`）计算候选 K。原量纲群组中心用于解释。
 - 算法二：计算每个候选的轮廓系数 `s=(b−a)/max(a,b)`，取均值最高者，同分选较小 K；保存所有候选的 inertia 与系数。
+- 算法三（分群约束，可选）：实验页按匿名编号录入同群、异群约定与每群人数范围。同群约定经传递连成不可拆分的组件；每个候选 K 先以带回溯的组件指派搜索寻找满足全部约束的分群（存在合法分群时必能找到，不会把逐客选择的死路误判为无解），再做约束版 Lloyd 迭代改进，最后只在可行 K 之间比较轮廓系数。不可行的候选 K 标注原因；全部不可行时研究失败并说明：关系冲突给出冲突链或两两异群的编号，容量拒绝给出人数依据（组件人数、每群上下限与客户总数）。群组页逐条核验每条约定与实际人数。
 - 业务解释：中心 recency≥55 且 spend≥700 为“沉默高价值”；recency≤25 且 frequency≥8 为“活跃深度学习”；spend<400 为“轻量探索”；其余为“稳定潜力”。标签只是明确规则产生的观察线索，不是因果结论。
-- 失败态：常量列、非有限值、重复特征、未知特征、样本不足、不同观测行不足和非法 K 范围；异步失败保存状态与原因，页面会显示恢复提示。
-- 可复算：固定种子 42，按客户主键排序，保存数值矩阵 SHA256、特征列表、候选范围。seed 创建 720 位客户、3 次独立研究、2 个方案，不覆盖已存在自然键记录。客户数据集不可修改，旧研究与名单对应固定数据。
+- 失败态：常量列、非有限值、重复特征、未知特征、样本不足、不同观测行不足和非法 K 范围；约束实验还包括未知匿名编号、同群与异群关系冲突、人数范围不可满足；异步失败保存状态与原因，页面会显示恢复提示。
+- 可复算：固定种子 42，按客户主键排序，保存数值矩阵 SHA256、特征列表、候选范围与分群约束及逐条核验结果。seed 创建 720 位客户、3 次独立研究、2 个方案，不覆盖已存在自然键记录。客户数据集不可修改，旧研究与名单对应固定数据。
 - 散点来自真实聚类标记，按群组分层随机展示最多 180 个样本（seed=42，每群均分配额，确保覆盖所有群组）；坐标为 recency 与 spend，超出显示范围的点在图边界截断，完整数据可在客户表与批准 CSV 查看。
 
 ## 技术与目录
@@ -62,7 +63,7 @@ docker compose exec -T backend python -m scripts.seed_demo
 | redis | Redis 7，AOF 命名卷与登录限流 |
 | 算法 | NumPy / scikit-learn KMeans、StandardScaler、silhouette_score |
 
-`frontend/src/{api,stores,types,components/common,hooks,pages,router,utils,constants}`。`backend/src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}`。`backend/scripts/seed_demo.py`。`backend/migrations/001_initial.sql` 说明 v1 自然键与初始 schema，启动由 metadata 创建；后续真实升级应添加版本迁移。
+`frontend/src/{api,stores,types,components/common,hooks,pages,router,utils,constants}`。`backend/src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}`。`backend/scripts/seed_demo.py`。`backend/migrations/001_initial.sql` 说明 v1 自然键与初始 schema，启动由 metadata 创建；`002_segment_run_constraints.sql` 为 segment_runs 增加约束列，启动时幂等应用，既有库的历史实验与获批名单保持原结果（约束列为 NULL 即无约束）；后续真实升级应添加版本迁移。
 
 五个核心实体 Dataset、Customer、SegmentRun、Segment、Campaign 各有 model/schema/service/controller/route/API，并经 Pinia store 进入页面。Overview 与 Segments 共用 SegmentSummary，Overview 与 Experiments 共用 RunTable，页面共用 PageHeading、StatusBadge、ErrorNotice、EmptyState。useTask 管理恢复状态，usePolling 管理运行中刷新。
 

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import text
 from redis import Redis
-from src.config.database import Base,engine
+from src.config.database import Base,engine,ensure_schema_upgrades
 from src.config.settings import SEED_DEMO,REDIS_URL
 from src import models
 from src.routes import auth,datasets,customers,runs,segments,campaigns,audit
@@ -13,6 +13,7 @@ from src.middlewares.rate_limit import RateLimitMiddleware
 @asynccontextmanager
 async def lifespan(app):
     Base.metadata.create_all(engine)
+    ensure_schema_upgrades()
     if SEED_DEMO:
         try:
             from scripts.seed_demo import seed

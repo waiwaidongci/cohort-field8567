@@ -12,6 +12,14 @@ def create_run(db, data):
         raise HTTPException(404,"数据集不存在")
     if db.scalar(select(SegmentRun).where(SegmentRun.name==data.name)):
         raise HTTPException(409,"实验名称已存在，请使用新的名称")
+    if data.constraints:
+        codes = {code for pair in (*data.constraints.must_link, *data.constraints.cannot_link) for code in pair}
+        if codes:
+            found = set(db.scalars(select(Customer.code).where(Customer.dataset_id==data.dataset_id, Customer.code.in_(codes))).all())
+            missing = sorted(codes - found)
+            if missing:
+                shown = "、".join(missing[:5]) + (" 等" if len(missing) > 5 else "")
+                raise HTTPException(422, f"匿名编号不存在于当前数据集：{shown}")
     run=SegmentRun(**data.model_dump(), status="queued")
     db.add(run); db.commit()
     queue.lpush("cohort:runs", str(run.id))
@@ -23,7 +31,7 @@ def execute_run(db, run_id):
     run.status="running"; db.commit()
     try:
         customers=db.scalars(select(Customer).where(Customer.dataset_id==run.dataset_id).order_by(Customer.id)).all()
-        result, segments=cluster_customers(customers,run.features,run.k_min,run.k_max)
+        result, segments=cluster_customers(customers,run.features,run.k_min,run.k_max,run.constraints or None)
         for old in db.scalars(select(Segment).where(Segment.run_id==run.id)).all():
             db.delete(old)
         db.flush()

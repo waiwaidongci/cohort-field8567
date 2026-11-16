@@ -1,13 +1,14 @@
 import random
 import json
 from sqlalchemy import select,func
-from src.config.database import Base, engine, Session
+from src.config.database import Base, engine, Session, ensure_schema_upgrades
 from src.models import User,Dataset,Customer,SegmentRun,Segment,Campaign
 from src.utils.security import hash_password
 from src.services.run_service import execute_run
 
 def seed():
     Base.metadata.create_all(engine)
+    ensure_schema_upgrades()
     rng=random.Random(42)
     with Session() as db:
         for role,name in [("admin","沈苇 · 运营负责人"),("analyst","陈岸 · 研究员"),("viewer","林禾 · 内容经理")]:
