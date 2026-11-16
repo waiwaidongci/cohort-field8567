@@ -1,0 +1,2 @@
+import {defineStore} from 'pinia';import {ref} from 'vue';import {getCustomers} from '../api/customers';import type {Customer} from '../types/domain';
+export const useCustomers=defineStore('customers',()=>{const rows=ref<Customer[]>([]),total=ref(0);async function load(dataset:number,search='',offset=0){const result=await getCustomers(dataset,search,offset);rows.value=result.rows;total.value=result.total;}return {rows,total,load};});
